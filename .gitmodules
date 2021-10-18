@@ -1,0 +1,3 @@
+[submodule "webapi/youtubedl"]
+	path = webapi/youtubedl
+	url = https://github.com/ytdl-org/youtube-dl.git
