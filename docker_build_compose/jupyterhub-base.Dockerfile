@@ -33,7 +33,7 @@ RUN useradd -m -s /bin/bash -N -g $NB_GID -u $NB_UID $NB_USER && \
     ln -s ${SHARED_WORKSPACE} /home/${NB_USER}/workspace && \
     chmod 775 /opt/jupyterhub -R && chmod 771 ${SHARED_WORKSPACE} -R && \
     chgrp $NB_GID /opt/jupyterhub -R && chgrp $NB_GID ${SHARED_WORKSPACE} -R 
-ENV PATH=/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/jupyterhub/bin::$PATH
+ENV PATH=/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/jupyterhub/bin:$PATH
 
 # -- Runtime
 

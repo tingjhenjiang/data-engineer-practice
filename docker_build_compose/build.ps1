@@ -1,16 +1,18 @@
 # -- Software Stack Version
 
-$SPARK_VERSION="3.1.2"
-$HADOOP_VERSION="3.3.1"
+$SPARK_VERSION="3.2.0"
+$HADOOP_VERSION="3.2"
+$SCALA_VERSION="2.13"
+$SCALA_DETAILED_VERSION="2.13.4"
+$ALMOND_VERSION="0.11.1"
 $JUPYTERLAB_VERSION="3.1.11"
 
 # -- Building the Images
 
 docker build -f cluster-base.Dockerfile -t cluster-base .
-
-Invoke-Expression -Command ("docker build --build-arg spark_version=" + $SPARK_VERSION + " --build-arg hadoop_version=" + $HADOOP_VERSION+ " -f spark-base.Dockerfile -t spark-base .")
-
+Invoke-Expression -Command ("docker build --build-arg SPARK_VERSION=" + $SPARK_VERSION + " --build-arg HADOOP_VERSION=" + $HADOOP_VERSION + " --build-arg SCALA_VERSION=" + $SCALA_VERSION+ " -f spark-base.Dockerfile -t spark-base .")
 docker build -f spark-master.Dockerfile -t spark-master .
 docker build -f spark-worker.Dockerfile -t spark-worker .
 docker build -f jupyterhub-base.Dockerfile -t jupyterhub-base .
-docker build -f jupyterhub-run_pyr.Dockerfile -t jupyterhub-run_pyr .
+Invoke-Expression -Command ("docker build --build-arg SPARK_VERSION=" + $SPARK_VERSION + " --build-arg SCALA_DETAILED_VERSION=" + $SCALA_DETAILED_VERSION + " --build-arg ALMOND_VERSION="+ $ALMOND_VERSION + " -f jupyterhub-run_pyr.Dockerfile -t jupyterhub-run_pyr .")
+#docker build -f jupyterhub-run_pyr.Dockerfile -t jupyterhub-run_pyr .

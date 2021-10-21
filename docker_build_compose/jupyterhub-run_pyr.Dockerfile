@@ -12,7 +12,11 @@ ARG CONDA_INSTALL_SH_NAME="Miniconda3-py${PYVER_without_dot}_${CONDA_VER}-Linux-
 ARG CONDA_DOWNLOAD_SH_PATH="https://repo.anaconda.com/miniconda/${CONDA_INSTALL_SH_NAME}"
 ARG RSTUDIO_VERSION="2021.09.0-351"
 ARG FINAL_RUN_INIT_SCRIPT="/run_jupyterhub_and_rstudio.sh"
-
+ARG SPARK_VERSION=3.2.0
+ARG sparkR_version=${SPARK_VERSION}
+ARG ALMOND_VERSION=0.11.2
+ARG SCALA_VERSION=2.13
+ARG SCALA_DETAILED_VERSION=2.13.4
 # Ref: https://github.com/jupyterhub/jupyterhub-the-hard-way/blob/HEAD/docs/installation-guide-hard.md
 # https://hub.docker.com/r/jupyter/base-notebook/dockerfile
 # https://hub.docker.com/r/rocker/rstudio/Dockerfile
@@ -29,8 +33,6 @@ RUN ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/python -c conda-f
     ${PY_BIN_in_CONDA} -m ipykernel install --prefix=/opt/jupyterhub/ --name "python_3${PYVER_SUFFIX}" --display-name "Python (data science default)" && \
     ${CONDA_PATH}/bin/conda clean -a
 
-RUN chgrp $NB_GID ${CONDA_PATH} -R && \
-    chmod 775 ${CONDA_PATH} -R
 ENV RETICULATE_PYTHON=${PY_BIN_in_CONDA}
 
 RUN apt-get update && \
@@ -46,7 +48,7 @@ RUN apt-get update && \
     apt-get autoclean && \
     rm -Rf /tmp/*
 
-RUN ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/r -c conda-forge r-essentials r-base r-dplyr r-sparklyr r-devtools r-irkernel git && \
+RUN ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/r -c conda-forge r-base r-sparklyr r-devtools r-irkernel git && \
     ${CONDA_PATH}/bin/conda clean -a
 
 ## Symlink pandoc & standard pandoc templates for use system-wide
@@ -95,10 +97,29 @@ RUN ln -s /usr/lib/rstudio-server/bin/pandoc/pandoc /usr/local/bin && \
     echo "session-timeout-minutes=0" > /etc/rstudio/rsession.conf && \
     echo "auth-timeout-minutes=0" >> /etc/rstudio/rserver.conf && \
     echo "auth-stay-signed-in-days=30" >> /etc/rstudio/rserver.conf && \
-    echo 'setwd("/opt/jupyterhub/bin") \
+    ## run custom scripts: install R kernel to jupyter and install SparkR
+    wget -O "/opt/conda/envs/r/SparkR.tar.gz" "https://archive.apache.org/dist/spark/spark-${sparkR_version}/SparkR_${sparkR_version}.tar.gz" && \
+    echo 'install.packages("/opt/conda/envs/r/SparkR.tar.gz", repos = NULL, type="source") \
+          \nsetwd("/opt/jupyterhub/bin") \
           \nIRkernel::installspec(name="R", displayname="R", prefix="/opt/jupyterhub/")' \
           > /opt/jupyterhub/install_Rkernel_to_jupyer.R && \
-    /opt/conda/envs/r/lib/R/bin/Rscript /opt/jupyterhub/install_Rkernel_to_jupyer.R
+    /opt/conda/envs/r/lib/R/bin/Rscript /opt/jupyterhub/install_Rkernel_to_jupyer.R && \
+    rm /opt/conda/envs/r/SparkR.tar.gz
+
+RUN chgrp $NB_GID ${CONDA_PATH}/envs/r -R && \
+    chmod 775 ${CONDA_PATH}/envs/r -R
+
+# scala part: 
+# https://almond.sh/docs/quick-start-install
+# https://github.com/almond-sh/almond/issues/729
+ENV COURSIER_CACHE=/usr/share/coursier/cache
+RUN curl -Lo coursier https://git.io/coursier-cli && \
+    chmod +x coursier && \
+    mkdir /usr/share/coursier/cache -p && \
+    ./coursier launch --fork "almond:${ALMOND_VERSION}" --scala "${SCALA_DETAILED_VERSION}" -- --install --id "almond" --jupyter-path "/opt/jupyterhub/share/jupyter/kernels" --display-name "Scala (almond)" && \
+    chgrp -R $NB_GID /usr/share/coursier && \
+    chmod -R g+rwxs /usr/share/coursier && \
+    rm ./coursier
 
 #http://ot-note.logdown.com/posts/244277/scala-tdd-preliminary-environmental-setting-tips
 #check path: https://repo1.maven.org/maven2/sh/almond/scala-kernel_2.13.4/
