@@ -1,15 +1,9 @@
 FROM jupyterhub-base
 
 # -- Layer: JupyterHub
-ARG NB_GID="100"
 ARG CONDA_PATH="/opt/conda"
-ARG PYVER_SUFFIX=9
-ARG PYVER="3.${PYVER_SUFFIX}"
-ARG PYVER_without_dot="3${PYVER_SUFFIX}"
-ARG PY_BIN_in_CONDA="${CONDA_PATH}/envs/python/bin/python3.${PYVER_SUFFIX}"
 ARG CONDA_VER="4.10.3"
-ARG CONDA_INSTALL_SH_NAME="Miniconda3-py${PYVER_without_dot}_${CONDA_VER}-Linux-x86_64.sh"
-ARG CONDA_DOWNLOAD_SH_PATH="https://repo.anaconda.com/miniconda/${CONDA_INSTALL_SH_NAME}"
+ARG CONDA_ARCH="Linux-x86_64"
 ARG RSTUDIO_VERSION="2021.09.0-351"
 ARG FINAL_RUN_INIT_SCRIPT="/run_jupyterhub_and_rstudio.sh"
 ARG SPARK_VERSION=3.2.0
@@ -23,17 +17,32 @@ ARG SCALA_DETAILED_VERSION=2.13.4
 # https://github.com/grst/rstudio-server-conda/blob/master/docker/init2.sh
 # https://medium.com/@am.benatmane/setting-up-a-spark-environment-with-jupyter-notebook-and-apache-zeppelin-on-ubuntu-e12116d6539e
 
-RUN wget --quiet ${CONDA_DOWNLOAD_SH_PATH} && \
-    /bin/bash ${CONDA_INSTALL_SH_NAME} -f -b -p $CONDA_PATH && \
+RUN pyverstring="${PYTHON_VERSION}" && \
+    PYVER_without_dot=$( echo "$pyverstring"  | sed -e "s/\.//g") && \
+    PY_BIN_in_CONDA="${CONDA_PATH}"/envs/python/bin/python && \
+    conda_install_sh_name=Miniconda3-py$PYVER_without_dot && \
+    conda_install_sh_name_suffix=$( echo "${CONDA_VER}"-"${CONDA_ARCH}".sh ) && \
+    conda_install_sh_name=$(printf "%s_%s" "$conda_install_sh_name" "$conda_install_sh_name_suffix") && \
+    conda_download_sh_path=$(printf "%s%s" "https://repo.anaconda.com/miniconda/" "$conda_install_sh_name") && \
+    echo "export PY_BIN_in_CONDA=$PY_BIN_in_CONDA \
+          \nexport PYVER_without_dot=$PYVER_without_dot \
+          \nexport CONDA_INSTALL_SH_NAME=$conda_install_sh_name && \
+          \nexport CONDA_DOWNLOAD_SH_PATH=$conda_download_sh_path" > /envvarset.sh
+
+RUN . /envvarset.sh && \
+    wget --quiet $CONDA_DOWNLOAD_SH_PATH && \
+    /bin/bash $CONDA_INSTALL_SH_NAME -f -b -p ${CONDA_PATH} && \
     ln -s ${CONDA_PATH}/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
-    rm ${CONDA_INSTALL_SH_NAME} && \
+    rm $CONDA_INSTALL_SH_NAME && \
     rm -Rf /tmp/*
 
-RUN ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/python -c conda-forge python=${PYVER} ipykernel requests pandas numpy scikit-learn scipy matplotlib pyspark git && \
-    ${PY_BIN_in_CONDA} -m ipykernel install --prefix=/opt/jupyterhub/ --name "python_3${PYVER_SUFFIX}" --display-name "Python (data science default)" && \
+RUN . /envvarset.sh && \
+    ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/python -c conda-forge python=${PYTHON_VERSION} ipykernel requests pandas numpy scikit-learn scipy matplotlib pyspark git && \
+    ${PY_BIN_in_CONDA} -m ipykernel install --prefix=/opt/jupyterhub/ --name python_$PYVER_without_dot --display-name "Python (data science default)" && \
     ${CONDA_PATH}/bin/conda clean -a
 
-ENV RETICULATE_PYTHON=${PY_BIN_in_CONDA}
+ENV . /envvarset.sh && \
+    RETICULATE_PYTHON=${PY_BIN_in_CONDA}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends sudo file libapparmor1 libclang-dev libcurl4-openssl-dev libedit2 libssl-dev lsb-release multiarch-support psmisc procps libpq5 && \
