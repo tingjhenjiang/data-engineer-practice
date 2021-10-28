@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 from flask import Flask, request, render_template, abort, jsonify
 from flask_restful import Resource, Api
+from co import get_co_data
 
 app = Flask(__name__,template_folder='templates')
 api = Api(app)
@@ -8,6 +9,17 @@ api = Api(app)
 @app.route('/', methods=['GET'])
 def index():
     return render_template('index.html')
+
+class apiresource_codata(Resource,get_co_data):
+    def __init__(self):
+        super(apiresource_codata, self).__init__()
+        super(get_co_data, self).__init__()
+    def get(self):
+        returndata = {'tkey': 'tdata'}
+        codataStream = self.repeat_get_data()
+        returndata = next(codataStream)
+        returndata = jsonify(returndata)
+        return returndata
 
 class apiresource_youtubedl(Resource):
     def __init__(self):
@@ -37,6 +49,7 @@ class apiresource_youtubedl(Resource):
             abort(404)
 
 api.add_resource(apiresource_youtubedl, '/ydl')
+api.add_resource(apiresource_codata, '/codata')
 
-#if __name__ == '__main__':
-#    app.run(debug=True, host='0.0.0.0', port=80)
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
