@@ -5,6 +5,7 @@ class get_co_data:
         self.ser = serial.Serial(device, baudrate=baudrate, timeout=timeout)
         self.ser.flush()
     def repeat_get_data(self):
+        float_values = ['ADC_In', 'Voltage_ADC', 'Resistance_RS', 'Ratio (RS/R0)', 'PPM']
         while True:
             if self.ser.in_waiting > 0:
                 line = self.ser.readline().decode('utf-8').rstrip()
@@ -18,6 +19,8 @@ class get_co_data:
                     items['time'] = time.ctime()
                     items['timestamp'] = time.time()
                     items['orig_line'] = line
+                    for key in float_values:
+                        items[key] = float(items[key])
                     yield items
                 else:
                     continue

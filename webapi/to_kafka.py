@@ -3,7 +3,7 @@ from kafka import KafkaProducer,KafkaConsumer
 import six,time,json
 
 topicName = 'codata'
-kafka_server = '192.168.1.104:9092'
+kafka_server = ['192.168.1.104:9092','192.168.1.106:9092']
 if True:
     producer = KafkaProducer(bootstrap_servers=kafka_server)
     codataClass = get_co_data()
