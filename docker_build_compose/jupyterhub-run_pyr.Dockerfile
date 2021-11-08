@@ -1,6 +1,62 @@
-FROM jupyterhub-base
+ARG debian_buster_image_tag=11-jdk-buster
+FROM openjdk:${debian_buster_image_tag}
 
-# -- Layer: JupyterHub
+# -- Layer: cluster-base
+
+ARG shared_workspace=/opt/workspace
+
+RUN mkdir -p ${shared_workspace}
+
+ENV SHARED_WORKSPACE=${shared_workspace}
+
+# -- Layer: JupyterHub-base
+
+ARG NB_USERs="user1"
+ARG NB_UID="1001"
+ARG NB_GID="100"
+ARG PYTHON_VERSION="3.7"
+
+# Ref: https://github.com/jupyterhub/jupyterhub-the-hard-way/blob/HEAD/docs/installation-guide-hard.md
+# https://hub.docker.com/r/jupyter/base-notebook/dockerfile
+# https://hub.docker.com/r/rocker/rstudio/Dockerfile
+# https://github.com/grst/rstudio-server-conda/blob/master/docker/init2.sh
+
+RUN for USER in `echo "${NB_USERs}" | grep -o -e "[^;]*"` ; do \
+        echo "+ handling user \"$USER\"" && \
+        useradd -m -s /bin/bash -N -g $NB_GID $USER && \
+        adduser $USER users && \
+        ln -s ${SHARED_WORKSPACE} /home/$USER/workspace ; \
+    done
+
+RUN apt-get update -y && \
+    apt-get install -y python3 python3-pip python3-venv wget rustc build-essential libssl-dev libffi-dev python3-dev python3-setuptools vim curl && \
+    python3 -m venv /opt/jupyterhub/ && \
+    /opt/jupyterhub/bin/python3 -m pip install -U pip && \
+    /opt/jupyterhub/bin/python3 -m pip install wheel && \
+    /opt/jupyterhub/bin/python3 -m pip install jupyterhub jupyterlab && \
+    /opt/jupyterhub/bin/python3 -m pip install ipywidgets && \
+    apt-get install -y nodejs npm && \
+    npm install -g configurable-http-proxy && \
+    mkdir -p /opt/jupyterhub/etc/jupyterhub/ && \
+    cd /opt/jupyterhub/etc/jupyterhub/ && \
+    /opt/jupyterhub/bin/jupyterhub --generate-config && \
+    echo "c.Spawner.default_url = '/lab'" >> /opt/jupyterhub/etc/jupyterhub/jupyterhub_config.py
+
+RUN chmod 775 /opt/jupyterhub -R && chmod 771 ${SHARED_WORKSPACE} -R && \
+    chgrp $NB_GID /opt/jupyterhub -R && chgrp $NB_GID ${SHARED_WORKSPACE} -R 
+
+ENV PATH=/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/jupyterhub/bin:$PATH
+ENV NB_GID=${NB_GID}
+ENV PYTHON_VERSION=${PYTHON_VERSION}
+
+# -- Layer: JupyterHub-run
+
+# Ref: https://github.com/jupyterhub/jupyterhub-the-hard-way/blob/HEAD/docs/installation-guide-hard.md
+# https://hub.docker.com/r/jupyter/base-notebook/dockerfile
+# https://hub.docker.com/r/rocker/rstudio/Dockerfile
+# https://github.com/grst/rstudio-server-conda/blob/master/docker/init2.sh
+# https://medium.com/@am.benatmane/setting-up-a-spark-environment-with-jupyter-notebook-and-apache-zeppelin-on-ubuntu-e12116d6539e
+
 ARG CONDA_PATH="/opt/conda"
 ARG CONDA_VER="4.10.3"
 ARG CONDA_ARCH="Linux-x86_64"
@@ -11,11 +67,6 @@ ARG sparkR_version=${SPARK_VERSION}
 ARG ALMOND_VERSION=0.11.2
 ARG SCALA_VERSION=2.13
 ARG SCALA_DETAILED_VERSION=2.13.4
-# Ref: https://github.com/jupyterhub/jupyterhub-the-hard-way/blob/HEAD/docs/installation-guide-hard.md
-# https://hub.docker.com/r/jupyter/base-notebook/dockerfile
-# https://hub.docker.com/r/rocker/rstudio/Dockerfile
-# https://github.com/grst/rstudio-server-conda/blob/master/docker/init2.sh
-# https://medium.com/@am.benatmane/setting-up-a-spark-environment-with-jupyter-notebook-and-apache-zeppelin-on-ubuntu-e12116d6539e
 
 RUN pyverstring="${PYTHON_VERSION}" && \
     PYVER_without_dot=$( echo "$pyverstring"  | sed -e "s/\.//g") && \
@@ -41,8 +92,7 @@ RUN . /envvarset.sh && \
     ${PY_BIN_in_CONDA} -m ipykernel install --prefix=/opt/jupyterhub/ --name python_$PYVER_without_dot --display-name "Python (data science default)" && \
     ${CONDA_PATH}/bin/conda clean -a
 
-ENV . /envvarset.sh && \
-    RETICULATE_PYTHON=${PY_BIN_in_CONDA}
+ENV RETICULATE_PYTHON=${PY_BIN_in_CONDA}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends sudo file libapparmor1 libclang-dev libcurl4-openssl-dev libedit2 libssl-dev lsb-release multiarch-support psmisc procps libpq5 && \
@@ -130,6 +180,18 @@ RUN curl -Lo coursier https://git.io/coursier-cli && \
     chmod -R g+rwxs /usr/share/coursier && \
     rm ./coursier
 
+#beakerx java part:
+# would appear message: [InstallKernelSpec] Installed kernelspec java in /opt/jupyterhub/share/jupyter/kernels/java
+RUN . /envvarset.sh && \
+    ${CONDA_PATH}/bin/conda create --prefix ${CONDA_PATH}/envs/beakerx -c beakerx beakerx_kernel_java && \
+    ${CONDA_PATH}/envs/beakerx/bin/beakerx_kernel_java install && \
+    ${CONDA_PATH}/bin/conda clean -a && \
+    chgrp $NB_GID ${CONDA_PATH}/envs/beakerx -R && \
+    chmod 775 ${CONDA_PATH}/envs/beakerx -R
+
+#/opt/conda/envs/beakerx/bin/beakerx_kernel_autotranslation
+#/opt/conda/envs/beakerx/bin/beakerx_tabledisplay
+
 #http://ot-note.logdown.com/posts/244277/scala-tdd-preliminary-environmental-setting-tips
 #check path: https://repo1.maven.org/maven2/sh/almond/scala-kernel_2.13.4/
 #./coursier launch --fork almond:0.11.1 --scala 2.13.4 -- --install --id "almond" --jupyter-path "/opt/jupyterhub/share/jupyter/kernels" --display-name "scala (almond 0.11.1)" --env PATH=$PATH:/opt/conda/envs/scala/bin/
@@ -150,5 +212,8 @@ EXPOSE 8888
 EXPOSE 8000
 EXPOSE 8787
 WORKDIR ${SHARED_WORKSPACE}
+VOLUME ${SHARED_WORKSPACE}
+#VOLUME ${shared_workspace}
+RUN chgrp $NB_GID ${SHARED_WORKSPACE} -R && chmod 771 ${SHARED_WORKSPACE} -R
 ENV FINAL_RUN_INIT_SCRIPT=$FINAL_RUN_INIT_SCRIPT
 CMD ["sh","-c","${FINAL_RUN_INIT_SCRIPT}"]
