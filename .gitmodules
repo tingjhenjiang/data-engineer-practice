@@ -1,3 +1,6 @@
 [submodule "webapi/youtubedl"]
 	path = webapi/youtubedl
 	url = https://github.com/ytdl-org/youtube-dl.git
+[submodule "bigdata_docker_images"]
+	path = bigdata_docker_images
+	url = https://github.com/tingjhenjiang/bigdata_docker_images.git
